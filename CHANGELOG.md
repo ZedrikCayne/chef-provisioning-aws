@@ -1,7 +1,59 @@
 # Change Log
 
-## [1.7.0](https://github.com/chef/chef-provisioning-aws/tree/1.7.0) (2015-11-19)
-[Full Changelog](https://github.com/chef/chef-provisioning-aws/compare/v1.6.1...1.7.0)
+## [1.10.0](https://github.com/chef/chef-provisioning-aws/tree/1.10.0) (2016-06-16)
+[Full Changelog](https://github.com/chef/chef-provisioning-aws/compare/v1.9.0...1.10.0)
+
+**Fixed bugs:**
+
+- aws\_auto\_scaling\_group TAGs? [\#478](https://github.com/chef/chef-provisioning-aws/issues/478)
+- WARN: nil is an invalid value for output\_key\_format of resource chef\_client. In Chef 13, this warning will change to an error. Error: Property output\_key\_format must be one of: Symbol [\#475](https://github.com/chef/chef-provisioning-aws/issues/475)
+- fix how machine\_options are specified [\#483](https://github.com/chef/chef-provisioning-aws/pull/483) ([jgoulah](https://github.com/jgoulah))
+- Added aws\_nat\_gateway resource and provider [\#482](https://github.com/chef/chef-provisioning-aws/pull/482) ([tyler-ball](https://github.com/tyler-ball))
+- Add tagging support for the aws\_auto\_scaling\_group resource [\#479](https://github.com/chef/chef-provisioning-aws/pull/479) ([itmustbejj](https://github.com/itmustbejj))
+
+## [v1.9.0](https://github.com/chef/chef-provisioning-aws/tree/v1.9.0) (2016-04-14)
+[Full Changelog](https://github.com/chef/chef-provisioning-aws/compare/v1.8.0...v1.9.0)
+
+**Fixed bugs:**
+
+- AWS EC2 long ids support [\#431](https://github.com/chef/chef-provisioning-aws/issues/431)
+- support winrm over https transport [\#348](https://github.com/chef/chef-provisioning-aws/issues/348)
+- Use Amazon API version 2 for aws\_image. [\#469](https://github.com/chef/chef-provisioning-aws/pull/469) ([joaogbcravo](https://github.com/joaogbcravo))
+
+**Merged pull requests:**
+
+- Add support for long instance IDs [\#474](https://github.com/chef/chef-provisioning-aws/pull/474) ([larrywright](https://github.com/larrywright))
+- Winrm+RDP/SSL Fingerprint and Encrypted Password Caching [\#441](https://github.com/chef/chef-provisioning-aws/pull/441) ([hh](https://github.com/hh))
+- Add missing S to the example! [\#432](https://github.com/chef/chef-provisioning-aws/pull/432) ([miguelcnf](https://github.com/miguelcnf))
+- Add a health check to the load balancer options example [\#426](https://github.com/chef/chef-provisioning-aws/pull/426) ([cwandrews](https://github.com/cwandrews))
+
+## [v1.8.0](https://github.com/chef/chef-provisioning-aws/tree/v1.8.0) (2016-02-03)
+[Full Changelog](https://github.com/chef/chef-provisioning-aws/compare/v1.7.0...v1.8.0)
+
+**Fixed bugs:**
+
+- machine resource's 'bootstrap\_options --\> user\_data' no longer has a default value \(Windows, Ec2\) [\#384](https://github.com/chef/chef-provisioning-aws/issues/384)
+- add default windows user\_data w/ base64 [\#400](https://github.com/chef/chef-provisioning-aws/pull/400) ([hh](https://github.com/hh))
+
+**Closed issues:**
+
+- Unable to access RDS endpoint with aws\_object [\#423](https://github.com/chef/chef-provisioning-aws/issues/423)
+- Improper flow of security group delete action [\#422](https://github.com/chef/chef-provisioning-aws/issues/422)
+- Unable to connect and ping public IP on AWS [\#415](https://github.com/chef/chef-provisioning-aws/issues/415)
+- undefined method `driver\_url' for nil:NilClass [\#414](https://github.com/chef/chef-provisioning-aws/issues/414)
+- unable to start new instance using aws\_auto\_scale [\#411](https://github.com/chef/chef-provisioning-aws/issues/411)
+- unexpected value at params\[:ssh\_user\] in with\_machine\_options, add\_machine\_options , machine\_options  [\#409](https://github.com/chef/chef-provisioning-aws/issues/409)
+- Security Group Data Bag Quote Parsing for Port Ranges [\#398](https://github.com/chef/chef-provisioning-aws/issues/398)
+
+**Merged pull requests:**
+
+- Switch to us-west-2 to fix tests [\#448](https://github.com/chef/chef-provisioning-aws/pull/448) ([jkeiser](https://github.com/jkeiser))
+- Bump revision to 1.8.0, add github-changelog-generator [\#443](https://github.com/chef/chef-provisioning-aws/pull/443) ([jkeiser](https://github.com/jkeiser))
+- Fix chef-provisioning-aws against 12.6 and 12.7 [\#442](https://github.com/chef/chef-provisioning-aws/pull/442) ([jkeiser](https://github.com/jkeiser))
+- Support for RDS parameter groups. [\#407](https://github.com/chef/chef-provisioning-aws/pull/407) ([tylercloke](https://github.com/tylercloke))
+
+## [v1.7.0](https://github.com/chef/chef-provisioning-aws/tree/v1.7.0) (2015-11-19)
+[Full Changelog](https://github.com/chef/chef-provisioning-aws/compare/v1.6.1...v1.7.0)
 
 **Fixed bugs:**
 

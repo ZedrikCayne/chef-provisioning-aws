@@ -36,6 +36,8 @@ AWS_V2_SERVICES = {
   "ElasticsearchService" => "elasticsearch",
   "IAM" => "iam",
   "RDS" => "rds",
+  "CloudWatch" => "cloudwatch",
+  "AutoScaling" => "auto_scaling"
 }
 Aws.eager_autoload!(:services => AWS_V2_SERVICES.keys)
 
@@ -536,16 +538,17 @@ module AWSDriver
       image_options = (image_options || {}).to_h.dup
       machine_options = (machine_options || {}).to_h.dup
       aws_tags = image_options.delete(:aws_tags) || {}
-      if actual_image.nil? || !actual_image.exists? || actual_image.state == :failed
+      if actual_image.nil? || !actual_image.exists? || actual_image.state.to_sym == :failed
         action_handler.perform_action "Create image #{image_spec.name} from machine #{machine_spec.name} with options #{image_options.inspect}" do
           image_options[:name] ||= image_spec.name
           image_options[:instance_id] ||= machine_spec.reference['instance_id']
           image_options[:description] ||= "Image #{image_spec.name} created from machine #{machine_spec.name}"
           Chef::Log.debug "AWS Image options: #{image_options.inspect}"
-          actual_image = ec2.images.create(image_options.to_hash)
+          image_type = ec2_client.create_image(image_options.to_hash)
+          actual_image = ec2_resource.image(image_type.image_id)
           image_spec.reference = {
             'driver_version' => Chef::Provisioning::AWSDriver::VERSION,
-            'image_id' => actual_image.id,
+            'image_id' => actual_image.image_id,
             'allocated_at' => Time.now.to_i,
             'from-instance' => image_options[:instance_id]
           }
@@ -565,7 +568,7 @@ module AWSDriver
         aws_tags = image_options.delete(:aws_tags) || {}
         aws_tags['from-instance'] = image_spec.reference['from-instance'] if image_spec.reference['from-instance']
         converge_ec2_tags(actual_image, aws_tags, action_handler)
-        if actual_image.state != :available
+        if actual_image.state.to_sym != :available
           action_handler.report_progress 'Waiting for image to be ready ...'
           wait_until_ready_image(action_handler, image_spec, actual_image)
         end
@@ -597,6 +600,44 @@ winrm set winrm/config/service/auth '@{Basic="true"}'
 
 netsh advfirewall firewall add rule name="WinRM 5985" protocol=TCP dir=in localport=5985 action=allow
 netsh advfirewall firewall add rule name="WinRM 5986" protocol=TCP dir=in localport=5986 action=allow
+
+net stop winrm
+sc config winrm start=auto
+net start winrm
+</powershell>
+EOD
+    end
+
+    def https_user_data
+          <<EOD
+<powershell>
+winrm quickconfig -q
+winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="300"}'
+winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+
+netsh advfirewall firewall add rule name="WinRM 5986" protocol=TCP dir=in localport=5986 action=allow
+
+$SourceStoreScope = 'LocalMachine'
+$SourceStorename = 'Remote Desktop'
+
+$SourceStore = New-Object  -TypeName System.Security.Cryptography.X509Certificates.X509Store  -ArgumentList $SourceStorename, $SourceStoreScope
+$SourceStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+
+$cert = $SourceStore.Certificates | Where-Object  -FilterScript {
+$_.subject -like '*'
+}
+
+$DestStoreScope = 'LocalMachine'
+$DestStoreName = 'My'
+
+$DestStore = New-Object  -TypeName System.Security.Cryptography.X509Certificates.X509Store  -ArgumentList $DestStoreName, $DestStoreScope
+$DestStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+$DestStore.Add($cert)
+
+$SourceStore.Close()
+$DestStore.Close()
+
+winrm create winrm/config/listener?Address=*+Transport=HTTPS  `@`{Hostname=`"($certId)`"`;CertificateThumbprint=`"($cert.Thumbprint)`"`}
 
 net stop winrm
 sc config winrm start=auto
@@ -648,11 +689,14 @@ EOD
       # sending out encrypted password, restarting instance, etc.
       if machine_spec.reference['is_windows']
         wait_until_machine(action_handler, machine_spec, "receive 'Windows is ready' message from the AWS console", instance) { |instance|
-          output = instance.console_output.output
-          if output.nil? || output.empty?
+          instance.console_output.output
+          # seems to be a bug as we need to run this twice
+          # to consistently ensure the output is fully pulled
+          encoded_output = instance.console_output.output
+          if encoded_output.nil? || encoded_output.empty?
             false
           else
-            output = Base64.decode64(output)
+            output = Base64.decode64(encoded_output)
             output =~ /Message: Windows is Ready to use/
           end
         }
@@ -845,10 +889,18 @@ EOD
       end
 
       if machine_options[:is_windows]
-        Chef::Log.debug "Setting Default WinRM userdata for windows..."
-        bootstrap_options[:user_data] = Base64.encode64(user_data) if bootstrap_options[:user_data].nil?
+        Chef::Log.debug "Setting Default windows userdata based on WinRM transport"
+        if bootstrap_options[:user_data].nil?
+          case machine_options[:winrm_transport]
+          when 'https'
+            data = https_user_data
+          else
+            data = user_data
+          end
+            bootstrap_options[:user_data] = Base64.encode64(data)
+        end
       else
-        Chef::Log.debug "Non-windows, not setting userdata"
+        Chef::Log.debug "Non-windows, not setting Default userdata"
       end
 
       bootstrap_options = AWSResource.lookup_options(bootstrap_options, managed_entry_store: machine_spec.managed_entry_store, driver: self)
@@ -984,30 +1036,114 @@ EOD
 
     def create_winrm_transport(machine_spec, machine_options, instance)
       remote_host = determine_remote_host(machine_spec, instance)
+      username = machine_options[:winrm_username] || 'Administrator'
+      # default to http for now, should upgrade to https when knife support self-signed
+      transport_type = machine_options[:winrm_transport] || 'http'
+      type = case transport_type
+             when 'http'
+               :plaintext
+             when 'https'
+               :ssl
+             end
+      if machine_spec.reference[:winrm_port]
+        port = machine_spec.reference[:winrm_port]
+      else #default port
+        port = case transport_type
+               when 'http'
+                 '5985'
+               when 'https'
+                 '5986'
+               end
+      end
+      endpoint = "#{transport_type}://#{remote_host}:#{port}/wsman"
 
-      port = machine_spec.reference['winrm_port'] || 5985
-      endpoint = "http://#{remote_host}:#{port}/wsman"
-      type = :plaintext
       pem_bytes = get_private_key(instance.key_name)
 
-      # TODO plaintext password = bad
-      password = machine_spec.reference['winrm_password']
-      if password.nil? || password.empty?
-        encrypted_admin_password = instance.password_data.password_data
-        if encrypted_admin_password.nil? || encrypted_admin_password.empty?
-          raise "You did not specify winrm_password in the machine options and no encrytpted password could be fetched from the instance"
+      if machine_options[:winrm_password]
+        password = machine_options[:winrm_password]
+      else # pull from ec2 and store in reference
+        if machine_spec.reference['winrm_encrypted_password']
+          decoded = Base64.decode64(machine_spec.reference['winrm_encrypted_password'])
+        else
+          encrypted_admin_password = instance.password_data.password_data
+          if encrypted_admin_password.nil? || encrypted_admin_password.empty?
+            raise "You did not specify winrm_password in the machine options and no encrytpted password could be fetched from the instance"
+          end
+
+          machine_spec.reference['winrm_encrypted_password']||=encrypted_admin_password
+          # ^^ saves encrypted password to the machine_spec
+          decoded = Base64.decode64(encrypted_admin_password)
         end
-        decoded = Base64.decode64(encrypted_admin_password)
-        private_key = OpenSSL::PKey::RSA.new(pem_bytes)
+        # decrypt so we can utilize
+        private_key = OpenSSL::PKey::RSA.new(get_private_key(instance.key_name))
         password = private_key.private_decrypt decoded
       end
 
+      disable_sspi =  machine_options[:winrm_disable_sspi] || false # default to Negotiate
+      basic_auth_only = machine_options[:winrm_basic_auth_only] || false # disallow Basic auth by default
+      no_ssl_peer_verification = machine_options[:winrm_no_ssl_peer_verification] || false #disallow MITM potential by default
+
       winrm_options = {
-        :user => machine_spec.reference['winrm_username'] || 'Administrator',
-        :pass => password,
-        :disable_sspi => true,
-        :basic_auth_only => true
+        user: username,
+        pass: password,
+        disable_sspi: disable_sspi,
+        basic_auth_only: basic_auth_only,
+        no_ssl_peer_verification: no_ssl_peer_verification,
       }
+
+      if no_ssl_peer_verification or type != :ssl
+        # =>  we won't verify certs at all
+        Chef::Log.info "No SSL or no peer verification"
+      elsif machine_spec.reference['winrm_ssl_thumbprint']
+        # we have stored the cert
+        Chef::Log.info "Using stored fingerprint"
+      else
+        # we need to retrieve the cert and verify it by connecting just to
+        # retrieve the ssl certificate and compare it to what we see in the
+        # console logs
+        instance.console_output.data.output
+        # again this seem to need to be run twice, to ensure
+        encoded_output = instance.console_output.data.output
+        console_lines = Base64.decode64(encoded_output).lines
+        fp_context = OpenSSL::SSL::SSLContext.new
+        tcp_connection = TCPSocket.new(instance.private_ip_address, port)
+        ssl_connection = OpenSSL::SSL::SSLSocket.new(tcp_connection, fp_context)
+
+        begin
+          ssl_connection.connect
+        rescue OpenSSL::SSL::SSLError => e
+          raise e unless e.message =~ /bad signature/
+        ensure
+          tcp_connection.close
+        end
+
+        winrm_cert = ssl_connection.peer_cert_chain.first
+
+        rdp_thumbprint = console_lines.grep(
+          /RDPCERTIFICATE-THUMBPRINT/)[-1].split(': ').last.chomp
+        rdp_subject = console_lines.grep(
+          /RDPCERTIFICATE-SUBJECTNAME/)[-1].split(': ').last.chomp
+        winrm_subject = winrm_cert.subject.to_s.split('=').last.upcase
+        winrm_thumbprint=OpenSSL::Digest::SHA1.new(winrm_cert.to_der).to_s.upcase
+
+        if rdp_subject != winrm_subject or rdp_thumbprint != winrm_thumbprint
+          Chef::Log.fatal "Winrm ssl port certificate differs from rdp console logs"
+        end
+        # now cache these for later use in the reference
+        if machine_spec.reference['winrm_ssl_subject'] != winrm_subject
+          machine_spec.reference['winrm_ssl_subject'] = winrm_subject
+        end
+        if machine_spec.reference['winrm_ssl_thumbprint'] != winrm_thumbprint
+          machine_spec.reference['winrm_ssl_thumbprint'] = winrm_thumbprint
+        end
+        if machine_spec.reference['winrm_ssl_cert'] != winrm_cert.to_pem
+          machine_spec.reference['winrm_ssl_cert'] = winrm_cert.to_pem
+        end
+      end
+
+      if machine_spec.reference['winrm_ssl_thumbprint']
+        winrm_options[:ssl_peer_fingerprint] = machine_spec.reference['winrm_ssl_thumbprint']
+      end
 
       Chef::Provisioning::Transport::WinRM.new("#{endpoint}", type, winrm_options, {})
     end
@@ -1109,7 +1245,7 @@ EOD
     end
 
     def wait_until_ready_image(action_handler, image_spec, image=nil)
-      wait_until_image(action_handler, image_spec, image) { image.state == :available }
+      wait_until_image(action_handler, image_spec, image) { |image| image.state.to_sym == :available }
       action_handler.report_progress "Image #{image_spec.name} is now ready"
     end
 
@@ -1126,6 +1262,8 @@ EOD
             :matching => /did not become ready within/
           ) do |retries, exception|
             action_handler.report_progress "been waiting #{retries*sleep_time}/#{max_wait_time} -- sleeping #{sleep_time} seconds for #{image_spec.name} (#{image.id} on #{driver_url}) to become ready ..."
+            # We have to manually reload the instance each loop, otherwise data is stale
+            image.reload
             unless yield(image)
               raise "Image #{image.id} did not become ready within #{max_wait_time} seconds"
             end

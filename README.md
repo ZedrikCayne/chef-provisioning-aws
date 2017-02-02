@@ -149,6 +149,8 @@ with_machine_options({
   use_private_ip_for_ssh: false, # DEPRECATED, use `transport_address_location`
   transport_address_location: :public_ip, # `:public_ip` (default), `:private_ip` or `:dns`.  Defines how SSH or WinRM should find an address to communicate with the instance.
   is_windows: true, # false by default
+  winrm_username: "Administrator",
+  winrm_password: "password", # Override if you have specified your own password and are not fetching the password from AWS
 })
 ```
 
@@ -181,7 +183,14 @@ load_balancer "my_elb" do
           port: 443,
           ssl_certificate_id: "arn:aws:iam::360965486607:server-certificate/cloudfront/foreflight-2015-07-09"
       }
-    ]
+    ],
+    health_check: {
+      healthy_threshold: 2,
+      unhealthy_threshold: 4,
+      interval: 12,
+      timeout: 5,
+      target: 'HTTPS:443/_status'
+    }
   })
 ```
 
@@ -382,10 +391,12 @@ aws_subnet 'my_subnet' do
 end
 
 machine 'my_machine' do
-  machine_options bootstrap_options: {
-    subnet_id: 'my_subnet',
-    security_group_ids: ['my_sg']
-  }
+  machine_options(
+    bootstrap_options: {
+      subnet_id: 'my_subnet',
+      security_group_ids: ['my_sg']
+    }
+  )
 end
 ```
 
