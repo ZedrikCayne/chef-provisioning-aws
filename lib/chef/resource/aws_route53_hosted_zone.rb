@@ -255,7 +255,17 @@ class Chef::Provider::AwsRoute53HostedZone < Chef::Provisioning::AWSDriver::AWSP
       rs.validate!
     end
 
-    Chef::Resource::AwsRoute53RecordSet.verify_unique!(record_set_resources)
+## dsr - do NOT verify uniqueness.  there's zero requirement for rr_names to be unique!  it's dns!
+# 5:31 PM]
+# keen anyone have any good solutions for `aws_route53_hosted_zone` vs `Chef::Exceptions::ValidationFailed: Duplicate RecordSet` ?   ie, I need to set `A` `SOA` `MX` etc all for `example.com` - I can do one, but not more than 1 since `rr_name`  is the same for all of them and https://github.com/chef/chef-provisioning-aws/blob/master/lib/chef/resource/aws_route53_record_set.rb#L139 doesnt seem to take type into account (nor that it's entirely valid to have multiple records with the same name regardless...)
+
+# [5:31 PM]
+# unless I'm missing something.
+#
+##    Chef::Resource::AwsRoute53RecordSet.verify_unique!(record_set_resources)
+
     record_set_resources
+
+
   end
 end
