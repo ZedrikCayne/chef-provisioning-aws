@@ -29,8 +29,9 @@ class Chef::Provider::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSProvide
     # port - create
     # db_port_number - modify
 
+    ### this might be better served by a list of options we CAN pass...
     ## remove create specific options we can't pass to modify
-    [:engine, :master_username, :db_subnet_group_name, :availability_zone, :character_set_name, :db_cluster_identifier, :db_name, :kms_key_id, :storage_encrypted, :tags, :timezone].each do |key|
+    [:engine, :master_username, :db_subnet_group_name, :availability_zone, :character_set_name, :db_cluster_identifier, :db_name, :kms_key_id, :storage_encrypted, :tags, :timezone, :db_cluster_identifier].each do |key|
       options_hash.delete(key)
     end
 
@@ -112,9 +113,10 @@ class Chef::Provider::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSProvide
          or instance.db_instance_status == 'available' \
          or instance.db_instance_status == 'backing-up'
           instance.reload  #reload first so we get a useful final log
-          Chef::Log.info "Create RDS instance: waiting for #{new_resource.db_instance_identifier} to be available.  State: #{instance.db_instance_status}, pending modifications: #{instance.pending_modified_values.to_h}, endpoint: #{instance.endpoint.to_h if ! instance.endpoint.nil? }"
+          Chef::Log.info "Create RDS instance: waiting for #{new_resource.db_instance_identifier} to be available.  State: #{instance.db_instance_status}, pending modifications: #{instance.pending_modified_values.to_h}, endpoint: #{instance.endpoint.to_h if ! instance.endpoint.nil? }, stuff: #{defined?(instance.endpoint).nil?} #{defined?(instance.endpoint.address).nil?} "
           sleep new_resource.wait_time
           tries -= 1
+##^^          ## this doesnt actually use tries...
           raise StatusTimeoutError.new(instance, instance.db_instance_status, "endpoint available, 'available', or 'backing-up'") if tries < 0
         end
         Chef::Log.info "Create RDS instance:  #{new_resource.db_instance_identifier} endpoint address = #{instance.endpoint.address}:#{instance.endpoint.port}"
@@ -130,7 +132,7 @@ class Chef::Provider::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSProvide
     end
     if new_resource.wait_for_delete
       # Wait up to sleep * tries / 60 minutes for the db instance to shutdown
-      converge_by "waited until RDS instance #{new_resource.name} was deleted" do
+      converge_by "waited until RDS instance #{new_resource.db_instance_identifier} was deleted" do
         wait_for(
           aws_object: instance,
           # http://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.DBInstance.Status.html

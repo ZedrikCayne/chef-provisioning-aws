@@ -120,8 +120,8 @@ class Chef::Provider::AwsRdsParameterGroup < Chef::Provisioning::AWSDriver::AWSP
     # Breaking the user is never the right option, so we have elected to not be itempotent.
     ! (desired_options[:parameters].nil? || desired_options[:parameters].empty?)
   end
-  
+
   def driver
-    new_resource.driver.rds.client
+    new_resource.driver.rds
   end
 end
