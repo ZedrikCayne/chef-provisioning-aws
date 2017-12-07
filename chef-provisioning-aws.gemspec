@@ -15,7 +15,15 @@ Gem::Specification.new do |s|
   s.add_dependency 'chef-provisioning', '~> 1.4'
 
   s.add_dependency 'aws-sdk-v1', '>= 1.59.0'
-  s.add_dependency 'aws-sdk', ['>= 2.2.18', '< 3.0']
+
+  s.add_dependency 'aws-sdk', ['>= 2.10.98', '< 3.0']
+## ^^^
+# - 2.1.26 doesnt work with rds clusters
+# 2.2.18 breaks
+# had an error: NotImplementedError: #exists? is not implemented for Aws::EC2::Image
+## ^^ works with 2.10.98.  haven't tried to narrow it down.
+
+
   s.add_dependency 'retryable', '~> 2.0', '>= 2.0.1'
   s.add_dependency 'ubuntu_ami', '~> 0.4', '>= 0.4.1'
 
