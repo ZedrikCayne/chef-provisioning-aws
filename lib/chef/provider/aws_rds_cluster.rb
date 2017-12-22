@@ -7,12 +7,13 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
 
   provides :aws_rds_cluster
 
-  ## any new first class attributes that should be passed to rds should be added here.  these are used to assemble options_hash
+  ## any new first class attributes that should be passed to rds MUST BE added here.
+  ## these are used to assemble options_hash
+  ## anything in additional_options is pashed into options_hash on it's own
   REQUIRED_OPTIONS = %i(db_cluster_identifier engine
                         master_username master_user_password)
 
-  OTHER_OPTIONS = %i(engine_version port db_subnet_group_name db_cluster_parameter_group_name vpc_security_group_ids)
-
+  OTHER_OPTIONS = %i(engine_version port db_subnet_group_name db_cluster_parameter_group_name vpc_security_group_ids backup_retention_period preferred_backup_window preferred_maintenance_window database_name)
 
 
 # ## update (and therefor modify) will ALWAYS called on any run after a create
@@ -27,6 +28,7 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
     ### and re-naming an cluster could definitely get weird.
     # db_cluster_identifier - create
     # new_db_cluster_identifier - modify
+
 
     ## remove create specific options we can't pass to modify
     [:engine, :engine_version, :master_username, :db_subnet_group_name, :availability_zones, :character_set_name, :database_name, :kms_key_id, :pre_signed_url, :destination_region, :source_region, :storage_encrypted, :tags].each do |key|
@@ -85,7 +87,6 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
     [:apply_immediately, :allow_major_version_upgrade, :ca_certificate_identifier ].each do |key|
       options_hash.delete(key)
     end
-    # puts "dsr: create rds cluster start"
     Chef::Log.info "Create RDS cluster: #{new_resource.db_cluster_identifier}"
     cluster={}
     converge_by "create RDS cluster #{new_resource.db_cluster_identifier} in #{region}" do
@@ -95,7 +96,7 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
     if new_resource.wait_for_create
       ## TODO
       Chef::Log.warn("Skipping RDS cluster wait_for_create because it's broken")
-#       #  TODO:  wait for create is BROKEN.
+# #TODO:  wait for create is BROKEN.
 #       converge_by "waiting until RDS cluster is available after create  #{new_resource.db_cluster_identifier} in #{region}" do
 
 #         ## custom wait loop - we can't use wait_for because we want to check for multiple possibilities, and some of them are undef at the time we start the loop.
@@ -165,6 +166,7 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
       end
     end
   end #def destroy
+
 
   # Sets the additional options then overrides it with all required options from
   # the resource as well as optional options

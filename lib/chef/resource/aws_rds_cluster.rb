@@ -7,7 +7,9 @@ class Chef::Resource::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSRDSResou
 
   aws_sdk_type ::Aws::RDS::DBCluster, id: :db_cluster_identifier
 
-  ## first class attributes for RDS parameters
+  ### first class attributes for RDS parameters
+  ### anything added here MUST be added to REQUIRED_OPTIONS or OTHER_OPTIONS
+  ### else they won't end up in options_hash
   # req
   attribute :db_cluster_identifier, kind_of: String, name_attribute: true
   # req
@@ -32,14 +34,15 @@ class Chef::Resource::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSRDSResou
   attribute :preferred_maintenance_window, kind_of: String, :default => nil
 
   attribute :database_name, :kind_of => String, :default => nil
-
+  ### end first class RDS parameters
 
 
   # RDS has a ton of options, allow users to set any of them via a
-  # custom Hash
+  # custom Hash - which is added to options_hash separately
   attribute :additional_options, kind_of: Hash, default: {}
 
   ## aws_rds_cluster specific attributes
+  ## these dont go into options_hash
   ##the existing state
   ### wait for create is BROKEN
   attribute :wait_for_create, kind_of: [TrueClass, FalseClass], default: false
@@ -74,4 +77,5 @@ class Chef::Resource::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSRDSResou
   def rds_tagging_type
     "db"
   end
+
 end
