@@ -6,7 +6,9 @@ class Chef::Resource::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSRDSReso
 
   aws_sdk_type ::Aws::RDS::DBInstance, id: :db_instance_identifier
 
-  ## first class attributes for RDS parameters
+  ### first class attributes for RDS parameters
+  ### anything added here MUST be added to REQUIRED_OPTIONS or OTHER_OPTIONS
+  ### else they won't end up in options_hash
   attribute :db_instance_identifier, kind_of: String, name_attribute: true
 
   attribute :engine, kind_of: String
@@ -26,9 +28,12 @@ class Chef::Resource::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSRDSReso
   # We cannot pass the resource or an AWS object because there is no AWS model
   # and that causes lookup_options to fail
   attribute :db_parameter_group_name, kind_of: String
+  ### end first class RDS parameters
+
 
   # RDS has a ton of options, allow users to set any of them via a
-  # custom Hash
+  # custom Hash - which is added to options_hash separately
+
   attribute :additional_options, kind_of: Hash, default: {}
 
   ## aws_rds_instance specific attributes

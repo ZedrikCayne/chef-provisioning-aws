@@ -6,7 +6,9 @@ class Chef::Provider::AwsRdsInstance < Chef::Provisioning::AWSDriver::AWSProvide
 
   provides :aws_rds_instance
 
-  ## any new first class attributes that should be passed to rds should be added here.  these are used to assemble options_hash
+  ## any new first class attributes that should be passed to rds MUST BE added here.
+  ## these are used to assemble options_hash
+  ## anything in additional_options is pashed into options_hash on it's own
   REQUIRED_OPTIONS = %i(db_instance_identifier allocated_storage engine
                         db_instance_class master_username master_user_password)
 
