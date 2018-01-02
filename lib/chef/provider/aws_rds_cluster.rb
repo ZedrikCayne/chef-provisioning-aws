@@ -148,6 +148,7 @@ class Chef::Provider::AwsRdsCluster < Chef::Provisioning::AWSDriver::AWSProvider
       cluster.delete(skip_final_snapshot: new_resource.skip_final_snapshot)
     end
     if new_resource.wait_for_delete
+### i'm not fully convinced that wait_for_delete works, either.
       # Wait up to sleep * tries / 60 minutes for the db cluster to shutdown
       converge_by "waited until RDS cluster #{new_resource.db_cluster_identifier} was deleted" do
         wait_for(
