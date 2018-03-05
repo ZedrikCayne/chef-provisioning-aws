@@ -32,7 +32,7 @@ AWS_V2_SERVICES = {
   "EC2" => "ec2",
   "Route53" => "route53",
   "S3" => "s3",
-  "ElasticLoadBalancing" => "elb",
+  "ElasticLoadBalancingV2" => "elb",
   "ElasticsearchService" => "elasticsearch",
   "IAM" => "iam",
   "RDS" => "rds",
@@ -191,9 +191,20 @@ module AWSDriver
 
         action_handler.perform_action updates do
           # IAM says the server certificate exists, but ELB throws this error
-          Chef::Provisioning::AWSDriver::AWSProvider.retry_with_backoff(AWS::ELB::Errors::CertificateNotFound) do
-            actual_elb = elb.load_balancers.create(lb_spec.name, lb_options)
+          Chef::Provisioning::AWSDriver::AWSProvider.retry_with_backoff(::Aws::ElasticLoadBalancingV2::Errors::CertificateNotFound) do
+            lb_options[:listeners].each do |listener|
+              if listener.has_key?(:server_certificate)
+                listener[:ssl_certificate_id] = listener.delete(:server_certificate)
+                listener[:ssl_certificate_id] = listener[:ssl_certificate_id][:arn]
+              end
+            end
+
+            lb_options[:load_balancer_name]=lb_spec.name
+            actual_elb = elb.create_load_balancer(lb_options)
           end
+
+          # load aws object for load balancer after create
+          actual_elb =load_balancer_for(lb_spec)
 
           lb_spec.reference = {
             'driver_version' => Chef::Provisioning::AWSDriver::VERSION,
@@ -277,22 +288,22 @@ module AWSDriver
 
           # We only bother attaching subnets, because doing this automatically attaches the AZ
           attach_subnets = desired_subnets_zones.keys - actual_zones_subnets.keys
-          unless attach_subnets.empty?
+unless attach_subnets.empty?
             action = "  attach subnets #{attach_subnets.join(', ')}"
             enable_zones = (desired_subnets_zones.map {|s,z| z if attach_subnets.include?(s)}).compact
             action += " (availability zones #{enable_zones.join(', ')})"
             perform_action.call(action) do
               begin
-                elb.client.attach_load_balancer_to_subnets(
-                  load_balancer_name: actual_elb.name,
+                elb.attach_load_balancer_to_subnets(
+                  load_balancer_name: actual_elb.load_balancer_name,
                   subnets: attach_subnets
                 )
-              rescue AWS::ELB::Errors::InvalidConfigurationRequest => e
+              rescue ::Aws::ElasticLoadBalancingV2::Errors::InvalidConfigurationRequest => e
                 Chef::Log.error "You cannot currently move from 1 subnet to another in the same availability zone. " +
                     "Amazon does not have an atomic operation which allows this.  You must create a new " +
                     "ELB with the correct subnets and move instances into it.  Tried to attach subets " +
                     "#{attach_subnets.join(', ')} (availability zones #{enable_zones.join(', ')}) to " +
-                    "existing ELB named #{actual_elb.name}"
+                    "existing ELB named #{actual_elb.load_balancer_name}"
                 raise e
               end
             end
@@ -769,7 +780,7 @@ EOD
     end
 
     def elb
-      @elb ||= AWS::ELB.new(config: aws_config)
+      @elb ||= ::Aws::ElasticLoadBalancingV2::Client.new(aws_config)
     end
 
     def elasticache
@@ -1425,7 +1436,7 @@ EOD
     def converge_elb_tags(aws_object, tags, action_handler)
       elb_strategy = Chef::Provisioning::AWSDriver::TaggingStrategy::ELB.new(
         elb_client,
-        aws_object.name,
+        aws_object.load_balancer_name,
         tags
       )
       aws_tagger = Chef::Provisioning::AWSDriver::AWSTagger.new(elb_strategy, action_handler)

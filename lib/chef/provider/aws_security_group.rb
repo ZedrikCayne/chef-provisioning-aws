@@ -276,10 +276,11 @@ class Chef::Provider::AwsSecurityGroup < Chef::Provisioning::AWSDriver::AWSProvi
       end
 
     # If a load balancer is specified, grab it and then get its automatic security group
-    when /^elb-[a-fA-F0-9]{8}$/, AWS::ELB::LoadBalancer, Chef::Resource::AwsLoadBalancer
-      lb = Chef::Resource::AwsLoadBalancer.get_aws_object(actor_spec, resource: new_resource)
-      get_actors(vpc, lb.source_security_group)
-
+    when /^elb-[a-fA-F0-9]{8}$/, Aws::ElasticLoadBalancingV2::Types::LoadBalancer, Chef::Resource::AwsLoadBalancer
+      lb=actor_spec
+      if lb.class != Aws::ElasticLoadBalancingV2::Types::LoadBalancer
+        lb = Chef::Resource::AwsLoadBalancer.get_aws_object(actor_spec, resource: new_resource)
+      end
     # If a security group is specified, grab it
     when /^sg-[a-fA-F0-9]{8}$/, AWS::EC2::SecurityGroup, Chef::Resource::AwsSecurityGroup
       Chef::Resource::AwsSecurityGroup.get_aws_object(actor_spec, resource: new_resource)

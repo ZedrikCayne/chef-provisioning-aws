@@ -1,6 +1,6 @@
 require 'chef/provisioning/aws_driver/aws_provider'
 
-class Chef::Provider::AwsLoadBalancer < Chef::Provisioning::AWSDriver::AWSProvider
+class Chef::Provider::AwsLoadBalancerV2 < Chef::Provisioning::AWSDriver::AWSProvider
 
   def aws_tagger
     @aws_tagger ||= begin
